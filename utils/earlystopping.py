@@ -1,10 +1,9 @@
 import torch
-from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
 class EarlyStopping:
     """주어진 patience 이후로 validation loss가 개선되지 않으면 학습을 조기 중지"""
-    def __init__(self, path, patience, verbose=False, delta=0):
+    def __init__(self, patience=7, verbose=True, delta=0, path='checkpoint.pt'):
         """
         Args:
             patience (int): validation loss가 개선된 후 기다리는 기간
@@ -23,12 +22,15 @@ class EarlyStopping:
         self.early_stop = False
         self.val_loss_min = np.Inf
         self.delta = delta
-        self.path = f"{path}/ckpts"
-    def __call__(self, val_loss, model):
+        self.path = path
+
+    def __call__(self, val_loss, epoch, model, optimizer):
+
         score = -val_loss
+
         if self.best_score is None:
             self.best_score = score
-            self.save_checkpoint(val_loss, model)
+            self.save_checkpoint(val_loss, epoch, model, optimizer)
         elif score < self.best_score + self.delta:
             self.counter += 1
             print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
@@ -36,20 +38,11 @@ class EarlyStopping:
                 self.early_stop = True
         else:
             self.best_score = score
-            self.save_checkpoint(val_loss, model)
+            self.save_checkpoint(val_loss, epoch, model, optimizer)
             self.counter = 0
-    def save_checkpoint(self, val_loss, model):
+
+    def save_checkpoint(self, val_loss, epoch, model, optimizer):
         '''validation loss가 감소하면 모델을 저장한다.'''
         if self.verbose:
             print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-        file = f"checkpoint-{val_loss:.4f}.pt"
-        torch.save(model.state_dict(), os.path.join(self.path, file))
-        self.val_loss_min = val_loss
-
-class TensorBoard:
-    def __init__(self, path):
-        self.writer = SummaryWriter(log_dir=f"{path}/logs")
-    def __call__(self, metrics, step):
-        for split in metrics.keys(): #train, val
-            for metric in metrics[split].keys():
-                self.writer.add_scalar(f"{metric}/{split}", metrics[split][metric], step)
+        model.save(epoch, self.path, optimizer=optimizer)
